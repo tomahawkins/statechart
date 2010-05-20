@@ -27,6 +27,8 @@ executable statechart
   main-is: Statechart.hs
 
   other-modules:
+    Model,
+    Rhapsody
 
   build-depends:
     base       >= 4.0 && < 5.0,
