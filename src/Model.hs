@@ -4,6 +4,9 @@ module Model
   , State         (..)
   , Connector     (..)
   , ConnectorType (..)
+  , Name
+  , Id
+  , Code
   , parseModel
   ) where
 
@@ -11,39 +14,41 @@ import Data.List
 
 import Rhapsody
 
-data Class = Class String [StateChart] deriving Show
+type Name = String
+type Id   = String
+type Code = String
 
-data StateChart = StateChart String [State] [Connector] [Transition] deriving Show
+data Class = Class Name [StateChart] deriving Show
+
+data StateChart = StateChart Name [State] [Connector] [Transition] deriving Show
 
 data State = State
-  { stateName         :: String
-  , stateId           :: String
-  , stateParent       :: Maybe String
-  , stateDefaultTrans :: Maybe String
-  , stateEntryAction  :: Maybe String
-  , stateExitAction   :: Maybe String
+  { stateName         :: Name
+  , stateId           :: Id
+  , stateParent       :: Maybe Id
+  , stateDefaultTrans :: Maybe Id
+  , stateEntryAction  :: Maybe Code
+  , stateExitAction   :: Maybe Code
   , stateAnd          :: Bool
   } deriving Show
 
 data Connector = Connector
-  { connectorName
-  , connectorId
-  , connectorParent :: String
+  { connectorName   :: Name
+  , connectorId     :: Id
+  , connectorParent :: Id
   , connectorType   :: ConnectorType
   } deriving Show
 
 data ConnectorType = Junction | Condition | Fork | Join deriving Show
 
 data Transition = Transition
-  { transitionName    :: String
-  , transitionTrigger :: Maybe Trigger
-  , transitionGuard   :: Maybe String
-  , transitionAction  :: Maybe String
-  , transitionSource  :: Maybe String
-  , transitionTarget  :: String
+  { transitionName    :: Name
+  , transitionTimeout :: Maybe Int
+  , transitionGuard   :: Maybe Code
+  , transitionAction  :: Maybe Code
+  , transitionSource  :: Maybe Id
+  , transitionTarget  :: Id
   } deriving Show
-
-data Trigger = Event String | Timeout Int deriving Show
 
 parseModel :: Record -> [Class]
 parseModel file = map parseClass $ containerRecords "Classes" file
@@ -85,7 +90,7 @@ parseConnector a = Connector
 parseTransition :: Record -> Transition
 parseTransition a = Transition
   { transitionName    = value "_name" a
-  , transitionTrigger = trigger
+  , transitionTimeout = timeout
   , transitionGuard   = maybeList $ body "_itsGuard"   label
   , transitionAction  = maybeList $ body "_itsAction"  label
   , transitionSource  = maybeList $ ident "_itsSource" a
@@ -93,10 +98,10 @@ parseTransition a = Transition
   }
   where
   label = head $ records "_itsLabel" a
-  trigger = case body "_itsTrigger" label of
-    a | isPrefixOf "tm(" a -> Just $ Timeout $ read $ drop 3 $ init a
+  timeout = case body "_itsTrigger" label of
+    a | isPrefixOf "tm(" a -> Just $ read $ drop 3 $ init a
       | null a             -> Nothing
-      | otherwise          -> Just $ Event a
+      | otherwise          -> error $ "not supported non tm() events: " ++ a
 
 maybeList :: [a] -> Maybe [a]
 maybeList a = if null a then Nothing else Just a

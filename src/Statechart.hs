@@ -2,6 +2,7 @@ module Main (main) where
 
 import System.Environment
 
+import Code
 import Model
 import Rhapsody
 
@@ -9,9 +10,7 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [file] -> do
-      f <- readFile file
-      print $ parseModel $ parseRhapsody f
+    [file] -> readFile file >>= genCode . parseModel . parseRhapsody
     _ -> help
 
 help :: IO ()
@@ -24,6 +23,7 @@ help = putStrLn $ unlines
   , "  statechart rhapsody-file"
   , ""
   , "DESCRIPTION"
+  , "  Compiles a statechart, outputs C to stdout."
   , ""
   ]
 

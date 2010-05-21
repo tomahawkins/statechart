@@ -27,6 +27,7 @@ executable statechart
   main-is: Statechart.hs
 
   other-modules:
+    Code,
     Model,
     Rhapsody
 
