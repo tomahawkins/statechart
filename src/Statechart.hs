@@ -10,7 +10,7 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [file] -> readFile file >>= genCode . parseModel . parseRhapsody
+    name : args@(_:_) -> readFile (last args) >>= genCode name (init args) . parseModel . parseRhapsody
     _ -> help
 
 help :: IO ()
@@ -20,10 +20,10 @@ help = putStrLn $ unlines
   , "  statechart - statechart code generation"
   , ""
   , "SYNOPSIS"
-  , "  statechart rhapsody-file"
+  , "  statechart <name> { <include-files> } <rhapsody-file>"
   , ""
   , "DESCRIPTION"
-  , "  Compiles a statechart, outputs C to stdout."
+  , "  Compiles a statechart to <name>.c"
   , ""
   ]
 
