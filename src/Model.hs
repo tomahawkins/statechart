@@ -1,5 +1,6 @@
 module Model
   ( Class         (..)
+  , Attribute     (..)
   , StateChart    (..)
   , State         (..)
   , Transition    (..)
@@ -19,9 +20,15 @@ type Name = String
 type Id   = String
 type Code = String
 
-data Class = Class Name [StateChart] deriving Show
+data Class = Class Name [Attribute] [StateChart] deriving Show
 
 data StateChart = StateChart Name [State] [Transition] deriving Show
+
+data Attribute = Attribute
+  { attrName :: Name
+  , attrType :: String
+  , attrInit :: Maybe String
+  } deriving Show
 
 data State = State
   { stateName         :: Name
@@ -57,7 +64,17 @@ parseModel :: Record -> [Class]
 parseModel file = map parseClass $ containerRecords "Classes" file
 
 parseClass :: Record -> Class
-parseClass a = Class (head $ values "_name" a) $ map parseStateChart $ containerRecords "StateCharts" a
+parseClass a = Class (head $ values "_name" a) (map parseAttribute $ containerRecords "Attrs" a)  (map parseStateChart $ containerRecords "StateCharts" a)
+
+parseAttribute :: Record -> Attribute
+parseAttribute a = Attribute
+  { attrName = value "_name" a
+  , attrType = value "_name" $ head $ records "_typeOf" a
+  , attrInit = case containerRecords "ValueSpecifications" a of
+      []  -> Nothing
+      [a] -> Just $ value "_value" a
+      _   -> error "too many value specifications"
+  }
 
 parseStateChart :: Record -> StateChart
 parseStateChart a = if not $ null $ containerRecords "Connectors" a then error "connectors not supported" else StateChart
@@ -74,6 +91,7 @@ parseState a = if values "_stateType" a == ["And"] then error $ "and state not s
   , stateEntryAction  = maybeList $ body  "_entryAction"  a
   , stateExitAction   = maybeList $ body  "_exitAction"   a
   } 
+
 {-
 parseConnector :: Record -> Connector
 parseConnector a = Connector

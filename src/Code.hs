@@ -13,7 +13,7 @@ genCode name period includes classes = writeFile (name ++ ".c") $ "// Generated 
   ++ concat [ "#include \"" ++ inc ++ "\"\n" | inc <- includes ]
   ++ "\n"
   ++ "void " ++ name ++ "() {\n"
-  ++ indent ("static uint64_t stateChartGlobalClock = 0;\n\n" ++ concatMap (codeStateChart period) (concat [ s | Class _ s <- classes ]) ++ "stateChartGlobalClock++;\n")
+  ++ indent ("static uint64_t stateChartGlobalClock = 0;\n\n" ++ concatMap codeAttr (concat [ a | Class _ a _ <- classes ]) ++ "\n" ++ concatMap (codeStateChart period) (concat [ s | Class _ _ s <- classes ]) ++ "stateChartGlobalClock++;\n")
   ++ "}\n\n"
   
 formatId :: String -> String -> String
@@ -29,6 +29,9 @@ indent = unlines . map ("  " ++) . lines
 
 block :: String -> String
 block a = "{\n" ++ indent a ++ "}\n"
+
+codeAttr :: Attribute -> String
+codeAttr a = printf "static %s %s%s;\n" (attrType a) (attrName a) (case attrInit a of { Nothing -> ""; Just i -> " = " ++ i})
 
 codeStateChart :: Int -> StateChart -> String
 codeStateChart period (StateChart name states transitions) = seq defaultState $ "// " ++ name ++ "\n" ++ block (unlines
