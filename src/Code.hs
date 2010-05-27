@@ -49,7 +49,7 @@ codeStateChart period (StateChart name states transitions) = seq defaultState $ 
 codeTransition :: Int -> [State] -> Transition -> String
 codeTransition period states t = case transitionSource t of
   Nothing     -> "// -> " ++ stateName (idState states target) ++ "\n"
-              ++ "if (period" ++ show period ++ "() && !" ++ sId (head b) ++ ") {\n"
+              ++ "if (period" ++ show period ++ "() && ! " ++ sId (head b) ++ ") {\n"
               ++ indent (transAction (transitionAction t) ++ concatMap (stateEntry . idState states) b)
               ++ "}\n\n"
     where
@@ -61,7 +61,7 @@ codeTransition period states t = case transitionSource t of
               ++ "}\n\n"
     where
     (a, b) = changedStates states source target
-    predicate = sId target ++ predicateTimeout ++ predicateGuard
+    predicate = sId source ++ predicateTimeout ++ predicateGuard
     predicateTimeout = case transitionTimeout t of
       Nothing -> ""
       Just i  -> " && (stateChartGlobalClock >= " ++ sId source ++ "_entryTime + (" ++ i ++ "))"
