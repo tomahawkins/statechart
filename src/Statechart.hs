@@ -31,7 +31,7 @@ help = putStrLn $ unlines
   , "  statechart - statechart code generation"
   , ""
   , "SYNOPSIS"
-  , "  statechart [ -o <output-file> | { -i <header-file> } ] <rhapsody-package-file>"
+  , "  statechart [ -o <output-name> | { -i <header-file> } ] <rhapsody-package-file>"
   , ""
   , "DESCRIPTION"
   , "  Compiles Rhapsody statecharts to C.  Each Rhapsody class will generate a function"
