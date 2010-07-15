@@ -42,9 +42,14 @@ containerRecords name rec = case records name rec of
 -- | A unique identifier field.
 ident :: String -> Record -> String
 ident name a = case values name a of
-  [_, a] -> a
+  [_, a] -> formatId a
   _ -> ""
-
+  where
+  formatId :: String -> String
+  formatId id = "__" ++ map f id
+  f '-' = '_'
+  f a = a
+  
 -- | Extract the _body string from triggers, guards, and actions.
 body :: String -> Record -> String
 body name rec = case records name rec of

@@ -26,14 +26,6 @@ genCode name includes classes = do
     ++ "void elapseTime(int ms) { __clock += (uint64_t) ms; }\n"
     ++ concatMap codeClass classes
 
-formatId :: String -> String -> String
-formatId prefix id = prefix ++ map f id
-  where
-  f '-' = '_'
-  f a = a
-
-sId = formatId "s_"
-
 indent :: String -> String
 indent = unlines . map ("  " ++) . lines
 
@@ -48,116 +40,33 @@ codeAttr :: Attribute -> String
 codeAttr a = printf "static %s %s%s;\n" (attrType a) (attrName a) (case attrInit a of { Nothing -> ""; Just i -> " = " ++ i})
 
 codeStateChart :: StateChart -> String
-codeStateChart (StateChart name states transitions) = seq defaultState $ "\n// Statechart " ++ name ++ ".\n"
-  ++ block (
-        concat [ printf "static bool %s = false;\n"           (sId $ stateId state) | state <- states ]
-     ++ concat [ printf "static uint64_t %s_entryTime = 0;\n" (sId $ stateId state) | state <- states ]
-     ++ intercalate "\nelse\n" (codeInit states defaultTransition rootState : mapMaybe (codeState states transitions) states)
+codeStateChart (StateChart name idsNames init transitions) = "\n// Statechart " ++ name ++ ".\n"
+  ++ block ( "static bool __init = false;\n"
+          ++ "static int __trans = 0;\n"
+          ++ concat [ printf "static bool %s = false;\n"           name | (_, name) <- idsNames ]
+          ++ concat [ printf "static uint64_t %s_entryTime = 0;\n" name | (_, name) <- idsNames ]
+          ++ codeInit stateName init
+          ++ codeTransitions stateName transitions
      )
   where
-  rootState = head [ state | state <- states, stateParent state == Nothing ]
-  defaultTransition = case [ t | t <- transitions, transitionSource t == Nothing ] of
-    [t] -> t
-    []  -> error "default state not specified (1)"
-    _   -> error "lower level default transitions not supported"
-  defaultState = if Just (transitionId defaultTransition) /= stateDefaultTrans rootState
-    then error "default state not specified (2)"
-    else head [ state | state <- states, stateId state == transitionTarget defaultTransition ]
+  stateName :: Id -> Name
+  stateName id = fromJust $ lookup id idsNames
 
-codeInit :: [State] -> Transition -> State -> String
-codeInit states transition state = "\n// Initialize\n"
-  ++ "if (! " ++ sId (stateId state) ++ ") " ++ block (codeTransition states transition)
+codeInit :: (Id -> Name) -> Init -> String
+codeInit stateName (Init actions targets) = "\n// Initialize\n"
+  ++ "if (! __init) " ++ block ("__init = true;\n" ++ transitionStates stateName [] targets ++ concat [ block a | a <- actions ])
 
-codeState :: [State] -> [Transition] -> State -> Maybe String
-codeState states transitions state = if null t then Nothing else Just $ "\n// In state " ++ stateName state ++ "\n"
-  ++ "if (" ++ sId (stateId state) ++ ") " ++ block (intercalate "\nelse\n" t)
+transitionStates :: (Id -> Name) -> [Id] -> [Id] -> String
+transitionStates stateName a b = concat [ printf "%s = false;\n" (stateName s) | s <- a \\ b ]
+                              ++ concat [ printf "%s = true;\n%s_entryTime = __clock;\n" (stateName s) (stateName s) | s <- b \\ a ]
+
+codeTransition :: (Id -> Name) -> Transition -> String
+codeTransition stateName t = printf "if (%s) " predicate ++ block (transition ++ action)
   where
-  t = [ codeTransition states t | t <- transitions, transitionSource t == Just (stateId state) ]
+  predicate = intercalate " && " $ [ stateName a | a <- transitionSource t ] ++ [ printf "__clock >= %s_entryTime + (%s)" (stateName id) time | (id, time) <- transitionTimeout t ] ++ [ printf "(%s)" a | a <- transitionGuard t ] 
+  transition = transitionStates stateName (transitionSource t) (transitionTarget t)
+  action = concat [ block a | a <- transitionAction t ]
 
-codeTransition :: [State] -> Transition -> String
-codeTransition states t = case transitionSource t of
-  Nothing     -> "\n// -> " ++ stateName (idState states target) ++ "\n"
-              ++ transAction (transitionAction t) ++ concatMap (stateEntry . idState states) b
-    where
-    b = hierarchy states target
-    
-  Just source -> "\n// " ++ stateName (idState states source) ++ " -> " ++ stateName (idState states target) ++ "\n"
-              ++ "if (" ++ predicate ++ ") " ++ block (concatMap (stateExit . idState states) a ++ transAction (transitionAction t) ++ concatMap (stateEntry . idState states) b)
-    where
-    (a, b) = changedStates states source target
-    predicate = case (predicateTimeout, predicateGuard) of
-      ("", "") -> "true"
-      ("", a)  -> a
-      (a, "")  -> a
-      (a, b)   -> "(" ++ a ++ ") && (" ++ b ++ ")"
-    predicateTimeout = case transitionTimeout t of
-      Nothing -> ""
-      Just i  -> "__clock >= " ++ sId source ++ "_entryTime + (" ++ i ++ ")"
-    predicateGuard = case transitionGuard t of
-      Nothing -> ""
-      Just g  -> g
-  where
-  target = transitionTarget t
+codeTransitions :: (Id -> Name) -> [Transition] -> String
+codeTransitions stateName transitions = printf "switch (__trans) " ++ block (concat [ printf "// %s -> %s\ncase %d:\n" (fst $ transitionName t) (snd $ transitionName t) n ++ (indent $ codeTransition stateName t ++ printf "__trans = %d;\nbreak;\n" (if n == length transitions - 1 then 0 else n + 1)) | (n, t) <- zip [0..] transitions ])
 
-stateExit :: State -> String
-stateExit s = case stateExitAction s of
-  Nothing ->              stateUpdate
-  Just a  -> a ++ "\n" ++ stateUpdate
-  where
-  stateUpdate = sId (stateId s) ++ " = false;\n"
-
-stateEntry :: State -> String
-stateEntry s = case stateEntryAction s of
-  Nothing ->              stateUpdate
-  Just a  -> a ++ "\n" ++ stateUpdate
-  where
-  stateUpdate = sId (stateId s) ++ " = true;\n" ++ sId (stateId s) ++ "_entryTime = __clock;\n"
-
-transAction :: Maybe String -> String
-transAction Nothing = ""
-transAction (Just a) = a ++ "\n"
-
-idState :: [State] -> Id -> State
-idState states id = head [ s | s <- states, stateId s == id ]
-
--- (statesExiting, statesEntering)  with proper order.
-changedStates :: [State] -> Id -> Id -> ([Id], [Id])
-changedStates states a b = (reverse a', b')
-  where
-  (a', b') = stripCommonPrefix (hierarchy states a) (hierarchy states b)
-
-hierarchy :: [State] -> Id -> [Id]
-hierarchy states id = case stateParent $ idState states id of
-  Nothing -> [id]
-  Just a  -> hierarchy states a ++ [id]
-
-stripCommonPrefix :: Eq a => [a] -> [a] -> ([a], [a])
-stripCommonPrefix (a : as) (b : bs)
-  | a == b    = stripCommonPrefix as bs
-  | otherwise = (a : as, b : bs)
-stripCommonPrefix a b = (a, b)
-
-{-
-data Class = Class Name [StateChart] deriving Show
-
-data StateChart = StateChart Name [State] [Connector] [Transition] deriving Show
-
-data State = State
-  { stateName         :: Name
-  , stateId           :: Id
-  , stateParent       :: Maybe Id
-  , stateDefaultTrans :: Maybe Id
-  , stateEntryAction  :: Maybe Code
-  , stateExitAction   :: Maybe Code
-  } deriving Show
-
-data Transition = Transition
-  { transitionName    :: Name
-  , transitionTimeout :: Maybe Int
-  , transitionGuard   :: Maybe Code
-  , transitionAction  :: Maybe Code
-  , transitionSource  :: Maybe Id
-  , transitionTarget  :: Id
-  } deriving Show
-
--}

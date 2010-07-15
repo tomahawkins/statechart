@@ -15,7 +15,7 @@ main = do
 
 parseArgs :: [String] -> Maybe (String, [String], String)
 parseArgs a = case a of
-  [a] | head a /= '-' -> Just (takeWhile (/= '.') a ++ ".c", [], a)
+  [a] | head a /= '-' -> Just (takeWhile (/= '.') a, [], a)
   "-o" : file : rest -> do
     (_, inc, sbs) <- parseArgs rest
     Just (file, inc, sbs)
